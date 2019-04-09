@@ -46,7 +46,8 @@ GraphNode::GraphNode(int port)
 	}
 	catch(std::exception & ex)
 	{
-		// std::cout << boost::this_thread::get_id() << " connecion exception " << ex.what() << std::endl;
+		std::cout << boost::this_thread::get_id()
+				 << " connecion exception " << ex.what() << std::endl;
 	}
 }
 
@@ -64,7 +65,6 @@ void GraphNode::make_connection(const boost::asio::ip::tcp::endpoint& ep)
 
 	if(std::find(this->friend_list.begin(), this->friend_list.end(), ep) != this->friend_list.end())
 		return;
-
 
 	boost::shared_ptr<boost::asio::ip::tcp::socket> client_socket (
 			new boost::asio::ip::tcp::socket(*ios, this->endpoint.protocol()));
@@ -107,8 +107,6 @@ void GraphNode::new_make_connection(const boost::asio::ip::tcp::endpoint& ep, in
 	    	// std::cout << "Current ep: " << boost::lexical_cast<std::string>(remote_ep) << std::endl;
 	for (auto& it: client_endpoints)
 	{
-    	// std::cout << "it->first: " << boost::lexical_cast<std::string>(it.first) << std::endl;
-    	// std::cout << "it->second: " << boost::lexical_cast<std::string>(it.second) << std::endl;
 	    if (it.second == remote_ep)
 	    {
 	    	message = "No";
@@ -242,7 +240,8 @@ void GraphNode::new_disconnect_friend(const boost::asio::ip::tcp::endpoint& ep, 
 	std::vector<boost::asio::ip::tcp::endpoint>::iterator it = 
 		std::find(this->friend_list.begin(), this->friend_list.end(), removed);
 
-	// std::cout << "Got disconnected from: " << boost::lexical_cast<std::string>(removed) << std::endl;
+	// std::cout << "Got disconnected from: "
+	//			 << boost::lexical_cast<std::string>(removed) << std::endl;
 	if(it != this->friend_list.end())
 	{
 		std::cout << "Disconnect from friend: " << boost::lexical_cast<std::string>(removed) << std::endl;
@@ -282,93 +281,92 @@ void GraphNode::process_new_message()
 
 				std::string message(v.begin(), v.begin() + read);
 				this->message_queue.push({ep.first, message});
-				// std::cout << "Added to queue: <" << message << ">" << std::endl;
 			}
 		}
 		// std::cout << "Message queue size " << this->message_queue.size() << std::endl;
 		while(this->message_queue.size() != 0)
 		{
 			std::string msg = message_queue.front().second;
+			boost::asio::ip::tcp::endpoint sender_endpoint = sender_endpoint; 
 			std::cout << "New message: <" << msg
-					<< "> from " << boost::lexical_cast<std::string>(message_queue.front().first) << std::endl;
+					<< "> from " << boost::lexical_cast<std::string>(sender_endpoint) << std::endl;
+
 			//case: msg = "Be friends?:port"
 			if(msg[0] == 'B')
 			{
 				int remote_port = get_friend_port(msg);
-				new_make_connection(message_queue.front().first, remote_port);
+				new_make_connection(sender_endpoint, remote_port);
 			}
 			else if(msg == "Yes")
 			{
-				connect_friend(message_queue.front().first);
+				connect_friend(sender_endpoint);
 			}
 			else if(msg == "No")
 			{
-				ask_for_friends(message_queue.front().first);
+				ask_for_friends(sender_endpoint);
 			}
 			else if(msg == "Send friends")
 			{
 				boost::system::error_code ec;
-				new_ask_for_friends(message_queue.front().first);
-				if(this->client_endpoints.find(message_queue.front().first) == this->client_endpoints.end())
+				new_ask_for_friends(sender_endpoint);
+				if(this->client_endpoints.find(sender_endpoint) == this->client_endpoints.end())
 				{
-					this->connections.at(message_queue.front().first)->shutdown(boost::asio::ip::tcp::socket::shutdown_both, ec);
-					this->connections.at(message_queue.front().first)->close();
+					this->connections.at(sender_endpoint)->shutdown(boost::asio::ip::tcp::socket::shutdown_both, ec);
+					this->connections.at(sender_endpoint)->close();
 
-					this->connections.erase(message_queue.front().first);
-					std::cout << "In <new_ask_for_friends> erased: " 
-							<< boost::lexical_cast<std::string>(message_queue.front().first) << std::endl; 
+					this->connections.erase(sender_endpoint);
+					std::cout << "Erased after sended friends: " 
+							<< boost::lexical_cast<std::string>(sender_endpoint) << std::endl; 
 				}
 			}
 			else if(msg == "Not confirmed(friends limit)")
 			{
-				disconnect_friend(message_queue.front().first,
-								this->client_endpoints.at(message_queue.front().first));
+				disconnect_friend(sender_endpoint,
+								this->client_endpoints.at(sender_endpoint));
 				std::cout << "Manual disconnect from: "
-						<< boost::lexical_cast<std::string>(message_queue.front().first) << std::endl;
+						<< boost::lexical_cast<std::string>(sender_endpoint) << std::endl;
 			}
 			//case msg = "Added to friends:port"
 			else if(msg[0] == 'A')
 			{
 				int port = get_friend_port(msg);
-				// std::cout << "Port of a friend " << port << std::endl;
-				new_connect_friend(message_queue.front().first, port);
+				new_connect_friend(sender_endpoint, port);
 			}
 			//case msg = "<friend_ep1;friend_ep2;friend_ep3.."
 			else if(msg[0] == '<')
 			{
 				boost::system::error_code ec;
 				std::cout << "Unpacking friends of " 
-						<< boost::lexical_cast<std::string>(message_queue.front().first) << std::endl;
+						<< boost::lexical_cast<std::string>(sender_endpoint) << std::endl;
 
 				unpack_friends(msg);
 
 				bool is_friend = false;
 				for(auto& it: this->client_endpoints)
 				{
-					if(it.first == message_queue.front().first)
+					if(it.first == sender_endpoint)
 					{
 						is_friend = true;
 						std::cout << "Cant erase friend: "
-								<< boost::lexical_cast<std::string>(message_queue.front().first) << std::endl;
+								<< boost::lexical_cast<std::string>(sender_endpoint) << std::endl;
 					}
 				}		
 				if(!is_friend)
 				{
-					std::cout << "In <else if(msg[0] == '<')> erased: " 
-							<< boost::lexical_cast<std::string>(message_queue.front().first); 
+					std::cout << "Erasing not friendly connection: " 
+							<< boost::lexical_cast<std::string>(sender_endpoint); 
 
-					this->connections.at(message_queue.front().first)->shutdown(boost::asio::ip::tcp::socket::shutdown_both, ec);
-					this->connections.at(message_queue.front().first)->close();
+					this->connections.at(sender_endpoint)->shutdown(boost::asio::ip::tcp::socket::shutdown_both, ec);
+					this->connections.at(sender_endpoint)->close();
 					
-					this->connections.erase(message_queue.front().first);
+					this->connections.erase(sender_endpoint);
 				}		
-
 			}
 			//case msg = "Removed:port"
 			else if(msg[0] == 'R')
 			{
 				int friend_port = get_friend_port(msg);
-				new_disconnect_friend(message_queue.front().first, friend_port);
+				new_disconnect_friend(sender_endpoint, friend_port);
 			}
 			//for broken messages
 			else
@@ -405,7 +403,6 @@ void GraphNode::run_connection_process()
 				|| std::find(this->friend_list.begin(), this->friend_list.end(), first_endpoint) != this->friend_list.end())
 			{
 				this->pending_endpoints.push(first_endpoint);
-				// std::cout << "Connecting to that piece of shit" << std::endl;
 			}
 			while (this->friend_list.size() != 6)
 			{
@@ -424,7 +421,6 @@ void GraphNode::run_connection_process()
 					boost::this_thread::sleep(boost::posix_time::seconds(1));
 					make_connection(ep);
 				}
-				// std::cout << this->endpoint << " Done [New make connection] " << ep << std::endl;
 			}
 		} 
 	}
@@ -446,9 +442,6 @@ void GraphNode::process_new_accept(boost::asio::yield_context yield)
 
 		this->acceptor->async_accept(*sock, yield);
 		
-		// std::cout << "Processing accept: " 
-				// << boost::lexical_cast<std::string>(sock->remote_endpoint()) << std::endl;
-
 		this->connections.insert({sock->remote_endpoint(), sock});
 		std::cout << "Client accepted: " 
 				<< boost::lexical_cast<std::string>(sock->remote_endpoint()) << std::endl;
@@ -486,26 +479,20 @@ void GraphNode::run_disconnection_process()
 
 void GraphNode::run_supporting_process()
 {
-	
 	srand(time(0));
 
 	std::map<boost::asio::ip::tcp::endpoint, int> unused_endpoints;//stagnant ones
 	
-	int count = 0;
 	int same_friend_size_count = 0;
 	int previous_friend_size = this->friend_list.size();
 
 	for(;;)
 	{
 		boost::this_thread::sleep(boost::posix_time::seconds(5));
-		std::cout << "Making lap in <run_supporting_process> " << count++ << std::endl;
 
 		/*Pushing not friendly endpoints into unused_endpoints*/
-		std::cout << "Entered first loop..." << std::endl;
-		
 		for(auto& ep: this->connections)
 		{
-
 			if(this->client_endpoints.find(ep.first) == this->client_endpoints.end()
 				&& unused_endpoints.find(ep.first) == unused_endpoints.end())
 			{
@@ -515,7 +502,6 @@ void GraphNode::run_supporting_process()
 						<< "--" << std::to_string(unused_endpoints.at(ep.first)) << std::endl;
 			}
 		}
-		std::cout << "Exited first loop." << std::endl;
 		
 		/*Checking if still have connections and incrementing(if have)*/
 		std::map<boost::asio::ip::tcp::endpoint, int> copy_unused_endpoints = unused_endpoints;;//stagnant ones
@@ -529,10 +515,9 @@ void GraphNode::run_supporting_process()
 			if(this->connections.find(unused_ep.first) == this->connections.end() 
 				|| this->client_endpoints.find(unused_ep.first) != this->client_endpoints.end())
 			{
-				
 				unused_endpoints.erase(unused_ep.first);
-				std::cout << "Deleting from unused_endpoints: " 
-							<< boost::lexical_cast<std::string>(unused_ep.first) << std::endl;
+				// std::cout << "Deleting from unused_endpoints: " 
+							// << boost::lexical_cast<std::string>(unused_ep.first) << std::endl;
 				continue;
 			}
 			
@@ -550,8 +535,6 @@ void GraphNode::run_supporting_process()
 				unused_endpoints.erase(unused_ep.first);
 			}
 		}
-		std::cout << "Exited second loop." << std::endl;
-
 
 		/*Asking for friends if friend_size remains same for too long*/
 		
@@ -560,14 +543,10 @@ void GraphNode::run_supporting_process()
 		
 		if(this->friend_list.size() == previous_friend_size && this->friend_list.size() != 0)
 		{
-			// std::cout << "Checkpoint 1" << std::endl;
-
 			++same_friend_size_count;
 		
-			// std::cout << "Checkpoint 2" << std::endl;/
 			if(same_friend_size_count == 5)
 			{
-				// std::cout << "Checkpoint 3" << std::endl;
 					boost::asio::ip::tcp::endpoint random_friend = this->friend_list[rand() % this->friend_list.size()];
 				
 				// std::cout << "Random friend: "
@@ -576,41 +555,25 @@ void GraphNode::run_supporting_process()
 
 				for(auto& it: this->client_endpoints)
 				{
-					// std::cout << "Checkpoint 4" << std::endl;
-					// std::cout << "Client_endpoint it.second: " 
-								// << boost::lexical_cast<std::string>(it.second) << std::endl;
-					// std::cout << "Client_endpoint it.second: " 
-								// << boost::lexical_cast<std::string>(it.second) << std::endl;
 					if(it.second == random_friend)
 					{
-						std::cout << "Asking randomly chosen friend it.second: " 
-								<< boost::lexical_cast<std::string>(it.second) << std::endl;
-
-						// std::cout << "Checkpoint 5" << std::endl;
-			
 						std::cout << "Manual ask_for_friends: " 
 								<< boost::lexical_cast<std::string>(it.first) << std::endl;
 						
-						// std::cout << "Checkpoint 6" << std::endl;
-						
 						ask_for_friends(it.first);
-						
-						// std::cout << "Checkpoint 7" << std::endl;
 					}
-			}
+				}
+				
 				same_friend_size_count = 0;
-			std::cout << "Checkpoint 8" << std::endl;
 			}
 		}
 		else
 		{
-			std::cout << "Previous_size: " << previous_friend_size << std::endl;
-			std::cout << "Current friend_size: " << this->friend_list.size() << std::endl;
+			// std::cout << "Previous_size: " << previous_friend_size << std::endl;
+			// std::cout << "Current friend_size: " << this->friend_list.size() << std::endl;
 
 			previous_friend_size = this->friend_list.size();
 		}
-	
-		std::cout << "Lap success" << std::endl;
 	}
 }
 
@@ -622,8 +585,6 @@ std::string GraphNode::pack_friends()
 	
 	for(int i = 0; i < this->friend_list.size(); ++i)
 	{
-		// result += this->friend_list[i].address().to_string() 
-				// + std::to_string(this->friend_list[i].port()) + ';';
 		result += boost::lexical_cast<std::string>(this->friend_list[i]) + ';';
 	}
 
@@ -638,15 +599,12 @@ void GraphNode::unpack_friends(std::string& endpoints)
 
 	std::string port;
 	std::string address;
-std::cout << "Checkpoint 1" <<std::endl;
 	while(endpoints[0] != '<')
 	{
 		endpoints.erase(endpoints.begin());
 	}
-std::cout << "Checkpoint 2" <<std::endl;
 	endpoints.erase(endpoints.begin());
-	std::cout << "Sended_message[0] " << endpoints[0] << std::endl;
-std::cout << "Checkpoint 3" <<std::endl;
+	// std::cout << "Sended_message[0] " << endpoints[0] << std::endl;
 	
 	while(endpoints.size())
 	{
@@ -655,31 +613,23 @@ std::cout << "Checkpoint 3" <<std::endl;
 			address += endpoints[0];
 			endpoints.erase(endpoints.begin());
 		}
-std::cout << "Checkpoint 4" <<std::endl;
 		endpoints.erase(endpoints.begin());
 		while(endpoints[0] != ';')
 		{
 			port += endpoints[0];
 			endpoints.erase(endpoints.begin());
 		}
-std::cout << "Checkpoint 5" <<std::endl;
 		endpoints.erase(endpoints.begin());	
 
 		boost::asio::ip::tcp::endpoint ep(boost::asio::ip::address::from_string(address), std::stoi(port));
-		std::cout << "Unpacked ep: " 
-				<< boost::lexical_cast<std::string>(ep) << std::endl;
+		// std::cout << "Unpacked ep: " 
+				// << boost::lexical_cast<std::string>(ep) << std::endl;
 
 		sended_endpoints.push_back(ep);
-std::cout << "Checkpoint 6" <<std::endl;
-		// std::cout << "Endpoint added to sended_endpoints:" 
-					// << boost::lexical_cast<std::string>(ep) << std::endl;
 
 		address.clear();
 		port.clear();
-std::cout << "Checkpoint 7" <<std::endl;
 	}
-std::cout << "Checkpoint 8" <<std::endl;
-
 	for(int i = 0; i < sended_endpoints.size(); ++i)
 	{
 		this->pending_endpoints.push(sended_endpoints[i]);
@@ -714,10 +664,10 @@ void GraphNode::cl_endpoints()
 	
 	for(auto& it: this->client_endpoints)
 	{
-		std::cout << "it.first" 
+		std::cout << "it.first " 
 				<< boost::lexical_cast<std::string>(it.first) << " ";
 
-		std::cout << "it.second" 
+		std::cout << "it.second " 
 				<< boost::lexical_cast<std::string>(it.second) << std::endl;
 	}
 	std::cout << "/============================================/" << std::endl;
@@ -728,20 +678,13 @@ void GraphNode::used_connections()
 	std::cout << "/-------------Connections-------------------/" << std::endl;
 	for(auto& it: this->connections)
 	{
-		std::cout << boost::lexical_cast<std::string>(it.first) << " ";
-		// if(it.second->is_open())
-		// {
-		// 	std::cout << it.second->remote_endpoint().port() << ";";
-		// }
-		std::cout << std::endl;
+		std::cout << boost::lexical_cast<std::string>(it.first) << std::endl;
 	}
 	std::cout << "/--------------------------------------------/" << std::endl;
 
 }
 int GraphNode::get_friend_port(std::string& message)
 {
-	// std::cout << "Entered to get_friend_port()" << std::endl;
-
 	int port = 0;
 	while(message[0] != ':')
 	{
