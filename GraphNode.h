@@ -66,6 +66,10 @@ public:
 	/*brief[friends] prints all friends (used for debugging)
 	*/
 	void friends();
+
+	/*brief[cl_endpoints] prints all client_endpoints (used for debugging)
+	*/
+	void cl_endpoints();
 	
 	/*brief[used_conenctions] prints all connections (used for debugging)
 	*/
