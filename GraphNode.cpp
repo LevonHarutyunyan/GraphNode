@@ -1,6 +1,6 @@
 #include "GraphNode.h"
 
-//Lifehacks, boiii
+//#hacks, boiii
 void read_callback(const boost::system::error_code& error, std::size_t bytes_transferred)
 {
 	// std::cout << "bytes_transferred: " << bytes_transferred << ", error: " << error << std::endl;  
@@ -8,6 +8,7 @@ void read_callback(const boost::system::error_code& error, std::size_t bytes_tra
 void write_callback(const boost::system::error_code& error, std::size_t bytes_transferred)
 {
 }
+
 void run_io_service(boost::shared_ptr<boost::asio::io_service>& io_service)
 {
 	io_service->run();
@@ -19,10 +20,14 @@ void OnConnected(const boost::system::error_code & ec, boost::shared_ptr<boost::
 void OnConnect(const boost::system::error_code & ec)
 {
 }
+// #endofhacks
 
-GraphNode::GraphNode(int port)
+
+GraphNode::GraphNode(int port, const std::string& passphrase)
 		: port(port)
+		, wallet(HDWallet(passphrase))
 {
+
 	ip_address = boost::asio::ip::address::from_string("127.0.0.1");
 	ios.reset(new boost::asio::io_service);
 	work.reset(new boost::asio::io_service::work(*ios));
@@ -84,12 +89,14 @@ void GraphNode::make_connection(const boost::asio::ip::tcp::endpoint& ep)
 	while(e_c.value() != boost::system::errc::success);
 	
 	/*Sending a message*/
+	// std::string message = pack_public_key();
 	std::string message;
 	if(this->friend_list.size() < 6 && this->port != first_endpoint.port())
 	{
-		// std::cout << "Wants to be friends with " << boost::lexical_cast<std::string>(ep) << std::endl;
+		std::cout << "Wants to be friends with " << boost::lexical_cast<std::string>(ep) << std::endl;
 		message = "Be friends?:";
 		message += std::to_string(this->endpoint.port());
+		// this->wallet.master_public_key.Print();
 		send(ep, message);
 	}
 	
@@ -297,6 +304,11 @@ void GraphNode::process_new_message()
 				int remote_port = get_friend_port(msg);
 				new_make_connection(sender_endpoint, remote_port);
 			}
+			else if(msg[0] == 'P') // PublicKey/*publickey*
+			{
+				PublicKey pkey(unpack_public_key(msg));
+				pkey.Print();
+			}
 			else if(msg == "Yes")
 			{
 				connect_friend(sender_endpoint);
@@ -377,14 +389,14 @@ void GraphNode::process_new_message()
 			message_queue.pop();
 		}
 
-		friends();
+		// friends();
 		
-		std::cout << "friend_list.size(): " << this->friend_list.size() << std::endl;
-		std::cout << "connections.size(): " << this->connections.size() << std::endl;
-		std::cout << "client_endpoints.size(): " << this->client_endpoints.size() << std::endl;
+		// std::cout << "friend_list.size(): " << this->friend_list.size() << std::endl;
+		// std::cout << "connections.size(): " << this->connections.size() << std::endl;
+		// std::cout << "client_endpoints.size(): " << this->client_endpoints.size() << std::endl;
 		
-		used_connections();
-		cl_endpoints();
+		// used_connections();
+		// cl_endpoints();
 	}
 }
 
@@ -579,6 +591,35 @@ void GraphNode::run_supporting_process()
 
 //-----------------------------------------------------//
 
+std::string GraphNode::pack_public_key() const
+{
+	std::string temp;
+	ser::Serialize(this->wallet.master_public_key, temp);
+	
+	std::cout << "In pack_public_key: temp: " << temp << std::endl;
+	std::string buffer =  "PublicKey/" + temp;
+	return buffer;
+}
+
+PublicKey GraphNode::unpack_public_key(std::string buffer) const
+{
+	//Deleting "PublicKey/"
+	while(buffer[0] != '/')
+	{
+		buffer.erase(buffer.begin());
+	}	 	
+	buffer.erase(buffer.begin());
+
+	//awkward deserialization process
+	PublicKey Dummy; 
+	ser::Deserialize(Dummy, buffer);
+	PublicKey Deserialized (Dummy.get_public_key());
+	Deserialized.Print();
+	return Deserialized;
+}
+
+//-----------------------------------------------------//
+
 std::string GraphNode::pack_friends()
 {
 	std::string result{'<'};
@@ -701,3 +742,10 @@ int GraphNode::get_friend_port(std::string& message)
 
 	return port;
 }
+
+
+/**************Other Functions****************/
+
+// void GraphNode::create_wallet(const std::string& passphrase)
+// 	: wallet(HDWallet(passphrase))
+// {}

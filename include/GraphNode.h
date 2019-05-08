@@ -19,6 +19,11 @@
 #include <boost/lexical_cast.hpp>
 #include <boost/date_time/posix_time/posix_time.hpp>
 
+#include "Serialize.h"
+#include "HDWallet.h"
+#include "PrivateKey.h"
+#include "PublicKey.h"
+
 #define BOOST_COROUTINES_NO_DEPRECATION_WARNING //ignores coroutine warning(doesn't work at all though)
 
 //first node's endpoint. First node can't conenct or send, only accepts and answers
@@ -33,6 +38,7 @@ static const boost::asio::ip::tcp::endpoint first_endpoint(boost::asio::ip::addr
  *param[message_queue] collects all incoming messages
  *param[friend_list] contains all original client endpoints that considered as friends 
  *param[client_endpoints] contains client_endpoint for connecting and original one
+ *param[wallet] node's wallet 
  */
 class GraphNode
 {
@@ -55,9 +61,13 @@ private:
 	std::vector<boost::asio::ip::tcp::endpoint> friend_list;
 	std::map<boost::asio::ip::tcp::endpoint, boost::asio::ip::tcp::endpoint> client_endpoints;
 
+	HDWallet wallet;
+
 public:
 
-	GraphNode(int port);
+	/*brief[Constructor] creates node with connection *port* and *passphrase* for HDWallet
+	 */	
+	GraphNode(int port, const std::string& passphrase);
 
 	/*brief[send] just sends messages to particular ep
 	 */
@@ -79,9 +89,18 @@ public:
 	*/
 	int get_friend_port(std::string& message);
 
-	/*brief[pack_friends] creates string from friends (<friend1;friend2..friendn;)
+	/*brief[pack_friends] creates string of friends (<friend1;friend2..friendn;)
 	*/
 	std::string pack_friends();
+	
+	/*brief[pack_public_key] creates string containing public key
+	 * "PublicKey/*public_key*"
+	*/
+	std::string pack_public_key() const;
+
+	/*brief[unpack_public_key] creates public key from string
+	*/
+	PublicKey unpack_public_key(std::string buffer) const;
 
 	/*brief[unpack_friends] creates endpoints and pushes them to pending_endpoints
 	*/
@@ -150,6 +169,15 @@ public:
 	 * 								and asks for someone to send friends if has not enough( 1 or 2 )
 	*/
 	void run_supporting_process(); 
+
+
+	/**************Other Functions****************/
+	
+	// brief[create_wallet] creates HDWallet for Node 
+	//  *param[passphrase] optional parameter for more security
+	
+	// void create_wallet(const std::string& passphrase = 0);
+
 };
 
 #endif //_GRAPHNODE_H__
